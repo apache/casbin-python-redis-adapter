@@ -2,6 +2,7 @@ from casbin_redis_adapter.adapter import Adapter
 from casbin_redis_adapter.adapter import CasbinRule
 
 from unittest import TestCase
+from unittest import mock
 import redis
 import casbin
 import os
@@ -69,6 +70,24 @@ class TestConfig(TestCase):
         self.assertFalse(e.enforce("bob", "data2", "read"))
         self.assertTrue(e.enforce("bob", "data2", "write"))
         self.assertTrue(e.enforce("alice", "data2", "read"))
+        self.assertTrue(e.enforce("alice", "data2", "write"))
+
+    def test_load_policy_single_round_trip(self):
+        """
+        test load_policy reads all rules with one LRANGE, not one LINDEX per rule
+        """
+        e = get_enforcer()
+        adapter = e.get_adapter()
+        with mock.patch.object(
+            adapter.client, "lrange", wraps=adapter.client.lrange
+        ) as lrange, mock.patch.object(
+            adapter.client, "lindex", side_effect=AssertionError("LINDEX used")
+        ):
+            e.load_policy()
+        lrange.assert_called_once_with("casbin_rules", 0, -1)
+        self.assertEqual(len(e.get_policy()), 4)
+        self.assertEqual(len(e.get_grouping_policy()), 1)
+        self.assertTrue(e.enforce("alice", "data1", "read"))
         self.assertTrue(e.enforce("alice", "data2", "write"))
 
     def test_add_policy(self):
