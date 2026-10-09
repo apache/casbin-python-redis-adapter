@@ -73,9 +73,9 @@ class Adapter(persist.Adapter):
             model (CasbinRule): CasbinRule object
         """
 
-        length = self.client.llen(self.key)
-        for i in range(length):
-            line = self.client.lindex(self.key, i)
+        # Fetch the whole list with a single LRANGE: one round trip instead of
+        # one LINDEX per rule, and an atomic snapshot of the list.
+        for line in self.client.lrange(self.key, 0, -1):
             line = json.loads(line)
             rule = CasbinRule(**line)
             persist.load_policy_line(str(rule), model)
